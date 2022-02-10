@@ -14,7 +14,11 @@ const CACHE_FILE = '.cached_calendar'
 app.get('/calendar.ics', (req, res) => {
 
     console.log('Calling calendar')
-    getCalendar(res)
+    console.log('If query in cache, date will be ignored until next data refresh')
+    const dateStringFilter = req.query['date'] ? req.query['date'] : '20000101'
+    const enableCache = req.query['cache'] ? true : false
+    console.log(`Using date ${dateStringFilter} and cache ${enableCache}`)
+    getCalendar(res, dateStringFilter, enableCache)
 
 })
 
@@ -101,14 +105,15 @@ async function getCachedContent() {
     return content
 }
 
-async function getCalendar(res) {
+async function getCalendar(res, dateStringFilter, enableCache) {
   res.setHeader('content-type', 'text/calendar')
 
-  // TODO we could use an  http param to activate cache with its duration
-  const cachedContent = await getCachedContent()
+  // Cache on the vcalendar content is enabled
+  let cachedContent = ''
+  if (enableCache) cachedContent = await getCachedContent()
 
   // we have a cached calendar
-  if (cachedContent.length) {
+  if (cachedContent !== '') {
       console.log('We return the cache content instead of fresh data')
       res.send(cachedContent)
       return
@@ -127,8 +132,8 @@ async function getCalendar(res) {
       xhr: xhr,
       loadObjects: true,
       loadCollections: true,
-      // we start from 2022 to avoid too big calendar (it could be a http param)
-      filters: createDateTimeFilter('20220101T000000Z')
+      // we start from 2022 to avoid too big calendar
+      filters: createDateTimeFilter(dateStringFilter + 'T000000Z')
   })
   console.log('calendar fetched')
 
