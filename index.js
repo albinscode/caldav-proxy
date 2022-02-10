@@ -2,6 +2,7 @@
 const express = require('express')
 const app = express()
 const fs = require('fs')
+const fsPromises = require('fs').promises
 const port = 3000
 const caldav = require('caldav')
 const config = require('./config.json')
@@ -22,7 +23,7 @@ app.get('/calendar.ics', (req, res) => {
 app.get('/single.ics', (req, res) => {
 
     console.log('Calling single calendar')
-    
+
     res.write('BEGIN:VCALENDAR\n')
     res.write('VERSION:2.0\n')
     res.write('CALSCALE:GREGORIAN\n')
@@ -74,19 +75,41 @@ function createDateTimeFilter(dateString) {
     }]
 }
 
+
+async function writeCachedContent(content) {
+    console.log('Writing cache file')
+    fsPromises.writeFile(CACHE_FILE, content)
+}
+
 async function getCachedContent() {
-    
-    return ''
+
+    let content = ''
+    try {
+        const stats = await fsPromises.stat(CACHE_FILE)
+        if ((Date.now() - stats.mtimeMs) / 1000 > CACHE_DURATION) {
+            console.log('Cache has expired')
+        }
+        else {
+            console.log('Reading file cache')
+            content = await fsPromises.readFile(CACHE_FILE, 'utf-8')
+        }
+    }
+    catch (e) {
+        console.log('Cache file does not exist')
+        return content
+    }
+    return content
 }
 
 async function getCalendar(res) {
   res.setHeader('content-type', 'text/calendar')
 
   // TODO we could use an  http param to activate cache with its duration
-  const cachedContent = getCachedContent()
+  const cachedContent = await getCachedContent()
 
   // we have a cached calendar
-  if (cachedContent) {
+  if (cachedContent.length) {
+      console.log('We return the cache content instead of fresh data')
       res.send(cachedContent)
       return
   }
@@ -109,13 +132,15 @@ async function getCalendar(res) {
   })
   console.log('calendar fetched')
 
+  let content = ''
   account.calendars.forEach( (calendar) => {
       // can be buggy if there is more than one calendar!
       // we output the VCALENDAR stream
-      calendar.objects.forEach( o => res.write(o.calendarData))
+      calendar.objects.forEach( o => content = content + o.calendarData)
   })
-  res.send()
+  writeCachedContent(content)
   console.log('calendar downloaded')
+  res.send(content)
 }
 
 app.listen(port, () => {
