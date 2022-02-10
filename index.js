@@ -11,7 +11,7 @@ const url = 'https://dav.linagora.com/calendars/5f61befa155943001e05f3f4/5f61bef
 const CACHE_DURATION = 3600
 const CACHE_FILE = '.cached_calendar'
 
-app.get('/calendar.ics', (req, res) => {
+app.get('/', (req, res) => {
 
     console.log('Calling calendar')
     console.log('If query in cache, date will be ignored until next data refresh')
