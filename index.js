@@ -3,6 +3,17 @@ const express = require('express')
 const app = express()
 const fs = require('fs')
 const fsPromises = require('fs').promises
+const { createLogger, format, timestamp, prettyPrint, transports } = require('winston');
+const logger = createLogger({
+   format:format.combine(
+      format.timestamp({format: 'MMM-DD-YYYY HH:mm:ss'}),
+      format.splat(),
+      format.align(),
+      format.printf(info => `${info.level}: ${[info.timestamp]}: ${info.message}`),
+  ),
+  transports: [new transports.Console()]
+});
+
 const port = 3000
 const caldav = require('caldav')
 const config = require('./config.json')
@@ -13,11 +24,11 @@ const CACHE_FILE = '.cached_calendar'
 
 app.get('/', (req, res) => {
 
-    console.log('Calling calendar')
-    console.log('If query in cache, date will be ignored until next data refresh')
+    logger.info('Calling calendar')
+    logger.info('If query in cache, date will be ignored until next data refresh')
     const dateStringFilter = req.query['date'] ? req.query['date'] : '20000101'
     const enableCache = req.query['cache'] ? true : false
-    console.log(`Using date ${dateStringFilter} and cache ${enableCache}`)
+    logger.info(`Using date ${dateStringFilter} and cache ${enableCache}`)
     getCalendar(res, dateStringFilter, enableCache)
 
 })
@@ -26,7 +37,7 @@ app.get('/', (req, res) => {
 // FIXME to put into a file
 app.get('/single.ics', (req, res) => {
 
-    console.log('Calling single calendar')
+    logger.info('Calling single calendar')
 
     res.write('BEGIN:VCALENDAR\n')
     res.write('VERSION:2.0\n')
@@ -81,7 +92,7 @@ function createDateTimeFilter(dateString) {
 
 
 async function writeCachedContent(content) {
-    console.log('Writing cache file')
+    logger.info('Writing cache file')
     fsPromises.writeFile(CACHE_FILE, content)
 }
 
@@ -91,15 +102,15 @@ async function getCachedContent() {
     try {
         const stats = await fsPromises.stat(CACHE_FILE)
         if ((Date.now() - stats.mtimeMs) / 1000 > CACHE_DURATION) {
-            console.log('Cache has expired')
+            logger.info('Cache has expired')
         }
         else {
-            console.log('Reading file cache')
+            logger.info('Reading file cache')
             content = await fsPromises.readFile(CACHE_FILE, 'utf-8')
         }
     }
     catch (e) {
-        console.log('Cache file does not exist')
+        logger.info('Cache file does not exist')
         return content
     }
     return content
@@ -114,7 +125,7 @@ async function getCalendar(res, dateStringFilter, enableCache) {
 
   // we have a cached calendar
   if (cachedContent !== '') {
-      console.log('We return the cache content instead of fresh data')
+      logger.info('We return the cache content instead of fresh data')
       res.send(cachedContent)
       return
   }
@@ -126,7 +137,7 @@ async function getCalendar(res, dateStringFilter, enableCache) {
 
   // caldav doc: https://sabre.io/dav/building-a-caldav-client/
   // thanks to the idea: https://support.google.com/calendar/thread/43801164/add-ical-address-and-pass-in-username-password?hl=en
-  console.log('fetching calendar')
+  logger.info('fetching calendar')
   const account = await caldav.createAccount({
       server: url,
       xhr: xhr,
@@ -135,7 +146,7 @@ async function getCalendar(res, dateStringFilter, enableCache) {
       // we start from 2022 to avoid too big calendar
       filters: createDateTimeFilter(dateStringFilter + 'T000000Z')
   })
-  console.log('calendar fetched')
+  logger.info('calendar fetched')
 
   let content = ''
   account.calendars.forEach( (calendar) => {
@@ -144,12 +155,12 @@ async function getCalendar(res, dateStringFilter, enableCache) {
       calendar.objects.forEach( o => content = content + o.calendarData)
   })
   writeCachedContent(content)
-  console.log('calendar downloaded')
+  logger.info('calendar downloaded')
   res.send(content)
 }
 
 app.listen(port, () => {
-    console.log(`Calendar app listening on port ${port}`)
+    logger.info(`Calendar app listening on port ${port}`)
 })
 
 
