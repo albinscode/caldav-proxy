@@ -5,24 +5,26 @@ const fs = require('fs')
 const fsPromises = require('fs').promises
 const { createLogger, format, timestamp, prettyPrint, transports } = require('winston');
 const logger = createLogger({
-   format:format.combine(
-      format.timestamp({format: 'MMM-DD-YYYY HH:mm:ss'}),
-      format.splat(),
-      format.align(),
-      format.printf(info => `${info.level}: ${[info.timestamp]}: ${info.message}`),
-  ),
-  transports: [new transports.Console()]
+    format:format.combine(
+        format.timestamp({format: 'MMM-DD-YYYY HH:mm:ss'}),
+        format.splat(),
+        format.align(),
+        format.printf(info => `${info.level}: ${[info.timestamp]}: ${info.message}`),
+    ),
+    transports: [new transports.Console()]
 });
 
 const port = 3000
 const caldav = require('caldav')
 const config = require('./config.json')
-const url = 'https://dav.linagora.com/calendars/5f61befa155943001e05f3f4/5f61befa155943001e05f3f4'
 // duration during which the last caldav request will be persisted into cache
 const CACHE_DURATION = 3600
 const CACHE_FILE = '.cached_calendar'
+const EXAMPLE_FILE = 'two-events.ics'
+const BEGIN_VEVENT = 'BEGIN:VEVENT'
+const END_VCALENDAR = 'END:VCALENDAR'
 
-app.get('/', (req, res) => {
+app.get('/calendar.ics', (req, res) => {
 
     logger.info('Calling calendar')
     logger.info('If query in cache, date will be ignored until next data refresh')
@@ -39,39 +41,16 @@ app.get('/single.ics', (req, res) => {
 
     logger.info('Calling single calendar')
 
-    res.write('BEGIN:VCALENDAR\n')
-    res.write('VERSION:2.0\n')
-    res.write('CALSCALE:GREGORIAN\n')
-    res.write('BEGIN:VEVENT\n')
-    res.write('SUMMARY:Access-A-Ride Pickup\n')
-    res.write('DTSTART;TZID=America/New_York:20130802T103400\n')
-    res.write('DTEND;TZID=America/New_York:20130802T110400\n')
-    res.write('LOCATION:1000 Broadway Ave.\, Brooklyn\n')
-    res.write('DESCRIPTION: Access-A-Ride trip to 900 Jay St.\, Brooklyn\n')
-    res.write('STATUS:CONFIRMED\n')
-    res.write('SEQUENCE:3\n')
-    res.write('BEGIN:VALARM\n')
-    res.write('TRIGGER:-PT10M\n')
-    res.write('DESCRIPTION:Pickup Reminder\n')
-    res.write('ACTION:DISPLAY\n')
-    res.write('END:VALARM\n')
-    res.write('END:VEVENT\n')
-    res.write('BEGIN:VEVENT\n')
-    res.write('SUMMARY:Access-A-Ride Pickup\n')
-    res.write('DTSTART;TZID=America/New_York:20130802T200000\n')
-    res.write('DTEND;TZID=America/New_York:20130802T203000\n')
-    res.write('LOCATION:900 Jay St.\, Brooklyn\n')
-    res.write('DESCRIPTION: Access-A-Ride trip to 1000 Broadway Ave.\, Brooklyn\n')
-    res.write('STATUS:CONFIRMED\n')
-    res.write('SEQUENCE:3\n')
-    res.write('BEGIN:VALARM\n')
-    res.write('TRIGGER:-PT10M\n')
-    res.write('DESCRIPTION:Pickup Reminder\n')
-    res.write('ACTION:DISPLAY\n')
-    res.write('END:VALARM\n')
-    res.write('END:VEVENT\n')
-    res.write('END:VCALENDAR\n')
-    res.send()
+    fsPromises.readFile(EXAMPLE_FILE, 'utf-8').then( (content, error) => {
+        if (error) {
+            res.send(error)
+            logger.error(error)
+        }
+        else {
+            res.send(content)
+        }
+    })
+
 })
 
 // datestring can be 19970714T000000Z
@@ -117,50 +96,67 @@ async function getCachedContent() {
 }
 
 async function getCalendar(res, dateStringFilter, enableCache) {
-  res.setHeader('content-type', 'text/calendar')
+    res.setHeader('content-type', 'text/calendar')
 
-  // Cache on the vcalendar content is enabled
-  let cachedContent = ''
-  if (enableCache) cachedContent = await getCachedContent()
+    // Cache on the vcalendar content is enabled
+    let cachedContent = ''
+    if (enableCache) cachedContent = await getCachedContent()
 
-  // we have a cached calendar
-  if (cachedContent !== '') {
-      logger.info('We return the cache content instead of fresh data')
-      res.send(cachedContent)
-      return
-  }
+    // we have a cached calendar
+    if (cachedContent !== '') {
+        logger.info('We return the cache content instead of fresh data')
+        res.send(cachedContent)
+        return
+    }
 
-  // we don't have a cached calendar we retrieve it from caldav server
-  const xhr = new caldav.transport.Basic(
-      new caldav.Credentials(config)
-  );
+    // we don't have a cached calendar we retrieve it from caldav server
+    const xhr = new caldav.transport.Basic(
+        new caldav.Credentials(config.auth)
+    );
 
-  // caldav doc: https://sabre.io/dav/building-a-caldav-client/
-  // thanks to the idea: https://support.google.com/calendar/thread/43801164/add-ical-address-and-pass-in-username-password?hl=en
-  logger.info('fetching calendar')
-  const account = await caldav.createAccount({
-      server: url,
-      xhr: xhr,
-      loadObjects: true,
-      loadCollections: true,
-      // we start from 2022 to avoid too big calendar
-      filters: createDateTimeFilter(dateStringFilter + 'T000000Z')
-  })
-  logger.info('calendar fetched')
+    // caldav doc: https://sabre.io/dav/building-a-caldav-client/
+    // thanks to the idea: https://support.google.com/calendar/thread/43801164/add-ical-address-and-pass-in-username-password?hl=en
+    logger.info('fetching calendar')
 
-  let content = ''
-  account.calendars.forEach( (calendar) => {
-      // can be buggy if there is more than one calendar!
-      // we output the VCALENDAR stream
-      calendar.objects.forEach( o => content = content + o.calendarData)
-  })
-  writeCachedContent(content)
-  logger.info('calendar downloaded')
-  res.send(content)
+    const account = await caldav.createAccount({
+        server: config.url,
+        xhr: xhr,
+        loadObjects: true,
+        loadCollections: true,
+        // we start from 2022 to avoid too big calendar
+        filters: createDateTimeFilter(dateStringFilter + 'T000000Z')
+    })
+    logger.info('calendar fetched')
+
+    let firstEvent = true
+    let content = ''
+    account.calendars.forEach( (calendar) => {
+        calendar.objects.forEach( o => {
+            content = content + extractEvent(o.calendarData, firstEvent)
+            firstEvent = false
+        })
+    })
+    if (content !== '') content = content + END_VCALENDAR
+    writeCachedContent(content)
+    logger.info('calendar downloaded')
+    res.send(content)
+}
+
+// we have to keep only events and wrap them in a single calendar
+// because the full ics file is giving several calendars
+function extractEvent(content, firstEvent) {
+    // if not the first event we remove calendar headers
+    if (!firstEvent) {
+        let index = content.indexOf(BEGIN_VEVENT)
+        if (index !== -1) content = content.substring(index)
+    }
+    let index = content.indexOf(END_VCALENDAR)
+    // in all cases we remove last line of calendar end
+    if (index !== -1) content = content.substring(0, index)
+
+    return content
 }
 
 app.listen(port, () => {
     logger.info(`Calendar app listening on port ${port}`)
 })
-
-

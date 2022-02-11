@@ -1,4 +1,7 @@
 {
-    "username": "myaccount",
-    "password": "mypassword"
+    "url": "http://example.com/calendar.ics"
+    "auth": {
+        "username": "myaccount",
+        "password": "mypassword"
+    }
 }
