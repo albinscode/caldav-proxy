@@ -3,5 +3,6 @@
     "auth": {
         "username": "myaccount",
         "password": "mypassword"
-    }
+    },
+    "defaultTimeZone": "Europe/Paris"
 }

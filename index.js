@@ -154,6 +154,10 @@ function extractEvent(content, firstEvent) {
     // in all cases we remove last line of calendar end
     if (index !== -1) content = content.substring(0, index)
 
+    // we put the default timezone if needed
+    content = content.replace('DTSTART:', `DTSTART;TZID=${config.defaultTimeZone}:`)
+    content = content.replace('DTEND:', `DTEND;TZID=${config.defaultTimeZone}:`)
+
     return content
 }
 
