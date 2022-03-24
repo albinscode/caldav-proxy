@@ -24,7 +24,7 @@ const EXAMPLE_FILE = 'two-events.ics'
 const BEGIN_VEVENT = 'BEGIN:VEVENT'
 const END_VCALENDAR = 'END:VCALENDAR'
 
-app.get('/calendar.ics', (req, res) => {
+app.get('/linagora.ics', (req, res) => {
 
     logger.info('Calling calendar')
     logger.info('If query in cache, date will be ignored until next data refresh')
@@ -161,7 +161,7 @@ function extractEvent(content, firstEvent) {
     // on some external events like teams, we have timezone ending with "Z".
     // we have to remove it to take into account the TZID previously added
     // with associated timezome and saving daylight/standard
-    content = content.replaceAll('00Z\n', '00\n')
+    content = content.replace(/00Z\n/g, '00\n')
 
 
     return content
