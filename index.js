@@ -158,6 +158,12 @@ function extractEvent(content, firstEvent) {
     content = content.replace('DTSTART:', `DTSTART;TZID=${config.defaultTimeZone}:`)
     content = content.replace('DTEND:', `DTEND;TZID=${config.defaultTimeZone}:`)
 
+    // on some external events like teams, we have timezone ending with "Z".
+    // we have to remove it to take into account the TZID previously added
+    // with associated timezome and saving daylight/standard
+    content = content.replaceAll('00Z\n', '00\n')
+
+
     return content
 }
 
